@@ -5,6 +5,8 @@ import { Response, NextFunction } from 'express';
 import * as Interfaces from 'src/backend/controllers/utils/interfaces';
 import AUTH_TOKEN from '../shared/constants/testAuthTokens';
 import UserRoles from '../shared/constants/UserRoles';
+import { handleQueries } from '../controllers/utils';
+import { CrowdsourcerSchema } from '../models/Crowdsourcer';
 
 const config = functions.config();
 /* Validates the user-provided auth token */
@@ -25,7 +27,7 @@ const authentication = async (
 
     if (authHeader) {
       if (!authHeader.startsWith('Bearer ')) {
-        throw new Error('Malformed authorization header. Must start with \'Bearer\'');
+        throw new Error("Malformed authorization header. Must start with 'Bearer'");
       }
       const token = authHeader.split(' ')[1] || '';
 
@@ -45,28 +47,28 @@ const authentication = async (
       }
 
       try {
+        const { mongooseConnection } = handleQueries(req);
+        const Crowdsourcer = mongooseConnection.model<Interfaces.Crowdsourcer>('Crowdsourcer', CrowdsourcerSchema);
         const decoded = await admin.auth().verifyIdToken(token);
+        const { id } = await Crowdsourcer.findOne({ firebaseId: decoded.uid });
         if (decoded && !req.user) {
           req.user = {
             role: decoded.role,
             uid: decoded.uid,
+            crowdsourcerId: id,
             editingGroup: decoded.editingGroup,
           };
         }
       } catch (err) {
         if (process.env.NODE_ENV !== 'test') {
           console.log(`Firebase authing error: ${err.message}`);
-          return res
-            .status(403)
-            .send({ error: err.message });
+          return res.status(403).send({ error: err.message });
         }
       }
       return next();
     }
   } catch (err) {
-    return res
-      .status(400)
-      .send({ error: err.message });
+    return res.status(400).send({ error: err.message });
   }
   return next();
 };

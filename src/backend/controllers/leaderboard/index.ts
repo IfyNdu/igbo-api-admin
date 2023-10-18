@@ -3,6 +3,7 @@ import { Response, NextFunction } from 'express';
 import * as Interfaces from 'src/backend/controllers/utils/interfaces';
 import { exampleSuggestionSchema } from 'src/backend/models/ExampleSuggestion';
 import { leaderboardSchema } from 'src/backend/models/Leaderboard';
+import { ReferralSchema } from 'src/backend/models/Referral';
 import LeaderboardType from 'src/backend/shared/constants/LeaderboardType';
 import LeaderboardTimeRange from 'src/backend/shared/constants/LeaderboardTimeRange';
 import countingFunctions from 'src/backend/controllers/leaderboard/countingFunctions';
@@ -24,15 +25,19 @@ const LeaderboardQuery = {
 const updateLeaderboardWithTimeRange = async ({
   Leaderboard,
   ExampleSuggestion,
+  Referral,
   leaderboardType,
   timeRange,
   user,
+  crowdsourcerId,
 }: {
   Leaderboard: Model<Interfaces.Leaderboard, unknown, unknown>;
   ExampleSuggestion: Model<Interfaces.ExampleSuggestion, unknown, unknown>;
+  Referral: Model<Interfaces.Referral, unknown, unknown>;
   leaderboardType: LeaderboardType;
   timeRange: LeaderboardTimeRange;
   user: Interfaces.FormattedUser;
+  crowdsourcerId: string;
 }) => {
   const leaderboardQuery = LeaderboardQuery[leaderboardType];
   const query = leaderboardQuery({ uid: user.uid, timeRange });
@@ -59,6 +64,15 @@ const updateLeaderboardWithTimeRange = async ({
   const fallbackCountingFunction = () => exampleSuggestionsByUser.length;
   const countingFunction = countingFunctions[leaderboardType] || fallbackCountingFunction;
 
+  const carol = await Referral.find({
+    referredUserId: crowdsourcerId,
+  }).count();
+
+  const alice = await Referral.find({
+    referrerId: crowdsourcerId,
+  }).count();
+
+  console.log({ carol, alice });
   const totalCount = countingFunction({
     exampleSuggestions: exampleSuggestionsByUser,
     uid: user.uid,
@@ -81,10 +95,12 @@ const updateLeaderboardWithTimeRange = async ({
 };
 
 const updateUserLeaderboardStat = async ({
+  crowdsourcerId,
   leaderboardType,
   mongooseConnection,
   user,
 }: {
+  crowdsourcerId: string;
   leaderboardType: LeaderboardType;
   mongooseConnection: Connection;
   user: Interfaces.FormattedUser;
@@ -94,10 +110,19 @@ const updateUserLeaderboardStat = async ({
     exampleSuggestionSchema,
   );
   const Leaderboard = mongooseConnection.model<Interfaces.Leaderboard>('Leaderboard', leaderboardSchema);
+  const Referral = mongooseConnection.model<Interfaces.Referral>('Referral', ReferralSchema);
 
   return Promise.all(
     Object.values(LeaderboardTimeRange).map(async (timeRange) =>
-      updateLeaderboardWithTimeRange({ Leaderboard, ExampleSuggestion, timeRange, user, leaderboardType }),
+      updateLeaderboardWithTimeRange({
+        Leaderboard,
+        ExampleSuggestion,
+        Referral,
+        timeRange,
+        crowdsourcerId,
+        user,
+        leaderboardType,
+      }),
     ),
   );
 };
@@ -111,7 +136,7 @@ export const getLeaderboard = async (
   const {
     skip,
     limit,
-    user: { uid },
+    user: { uid, crowdsourcerId },
     leaderboard,
     timeRange,
     mongooseConnection,
@@ -120,6 +145,18 @@ export const getLeaderboard = async (
   if (!leaderboard) {
     throw new Error('Please provide a leaderboard to view');
   }
+
+  const Referral = mongooseConnection.model<Interfaces.Referral>('Referral', ReferralSchema);
+
+  const carol = await Referral.find({
+    referredUserId: crowdsourcerId,
+  }).count();
+
+  const alice = await Referral.find({
+    referrerId: crowdsourcerId,
+  }).count();
+
+  console.log('---->>>.', JSON.stringify({ carol, alice, crowdsourcerId }, null, 2));
 
   const user = (await findUser(uid)) as Interfaces.FormattedUser;
   try {
@@ -157,7 +194,7 @@ export const calculateRecordingExampleLeaderboard = async (
   next: NextFunction,
 ): Promise<any> => {
   const {
-    user: { uid },
+    user: { crowdsourcerId, uid },
     error,
     response,
     mongooseConnection,
@@ -170,6 +207,7 @@ export const calculateRecordingExampleLeaderboard = async (
   try {
     const user = (await findUser(uid)) as Interfaces.FormattedUser;
     await updateUserLeaderboardStat({
+      crowdsourcerId,
       leaderboardType: LeaderboardType.RECORD_EXAMPLE_AUDIO,
       mongooseConnection,
       user,
@@ -187,7 +225,7 @@ export const calculateTranslatingExampleLeaderboard = async (
   next: NextFunction,
 ): Promise<any> => {
   const {
-    user: { uid },
+    user: { crowdsourcerId, uid },
     error,
     response,
     mongooseConnection,
@@ -200,6 +238,7 @@ export const calculateTranslatingExampleLeaderboard = async (
   try {
     const user = (await findUser(uid)) as Interfaces.FormattedUser;
     await updateUserLeaderboardStat({
+      crowdsourcerId,
       leaderboardType: LeaderboardType.TRANSLATE_IGBO_SENTENCE,
       mongooseConnection,
       user,
@@ -217,7 +256,7 @@ export const calculateReviewingExampleLeaderboard = async (
   next: NextFunction,
 ): Promise<any> => {
   const {
-    user: { uid },
+    user: { crowdsourcerId, uid },
     error,
     response,
     mongooseConnection,
@@ -230,6 +269,7 @@ export const calculateReviewingExampleLeaderboard = async (
   try {
     const user = (await findUser(uid)) as Interfaces.FormattedUser;
     await updateUserLeaderboardStat({
+      crowdsourcerId,
       leaderboardType: LeaderboardType.VERIFY_EXAMPLE_AUDIO,
       mongooseConnection,
       user,

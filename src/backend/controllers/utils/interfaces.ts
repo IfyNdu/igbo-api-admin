@@ -39,7 +39,7 @@ export interface HandleQueries {
 
 // @ts-expect-error EditorRequest
 export interface EditorRequest extends Request {
-  user: UserRecord;
+  user: UserRecord & { crowdsourcerId: string };
   query: {
     keyword?: string;
     page?: number | string;
@@ -388,14 +388,14 @@ export type FirebaseUser = UserRecord;
 
 export interface Crowdsourcer {
   firebaseId: string;
-  id: string;
+  id: Types.ObjectId;
   referralCode: string;
 }
 
 export interface Referral {
-  id: string;
-  referrerId: Crowdsourcer;
-  referredUserId: Crowdsourcer;
+  id: Types.ObjectId;
+  referrerId: Crowdsourcer['id'];
+  referredUserId: Crowdsourcer['id'];
 }
 
 export interface SearchRegExp {
